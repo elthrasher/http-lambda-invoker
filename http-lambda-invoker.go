@@ -123,6 +123,8 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(key, value)
 		}
 	}
+	// Enable cors
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	// Write status code and body.
 	w.WriteHeader(response.StatusCode)
 	fmt.Fprintf(w, string(response.Body))
