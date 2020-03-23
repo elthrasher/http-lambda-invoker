@@ -1,6 +1,5 @@
 .dockerignore
 Dockerfile
-LICENSE.md
 README.md
 
 *_test.go

@@ -4,6 +4,8 @@ A tiny (<20m) Docker image to invoke lambda functions via http. This is my first
 
 [SAM](https://aws.amazon.com/serverless/sam/) is a great framework for developing a few lambda functions, but it's challenging to fit into existing development workflows based on docker-compose. http-lambda-invoker allows invoking lambda functions via http in a mixed serverless and container local development environment.
 
+Check out the [blog post](https://dev.to/elthrasher/integrating-sam-into-container-workflows-with-http-lambda-invoker-4o8) I wrote explaining why.
+
 # Example of use
 
 ```yaml
