@@ -21,19 +21,17 @@ func (m mockLambdaClient) Invoke(*lambda.InvokeInput) (*lambda.InvokeOutput, err
 	return &m.Resp, nil
 }
 
-func TestLambdaInvoke(t *testing.T) {
+func runTest(t *testing.T, r restResponse) {
 	req, err := http.NewRequest("GET", "/", ioutil.NopCloser(strings.NewReader("")))
 	if err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
 
-	response := restResponse{
-		Body:       "this is a test",
-		Headers:    nil,
-		StatusCode: 200,
+	payload, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
 	}
-	payload, err := json.Marshal(response)
 	status := int64(200)
 	resp := struct {
 		Resp lambda.InvokeOutput
@@ -50,14 +48,55 @@ func TestLambdaInvoke(t *testing.T) {
 
 	l.invokeLambda(rr, req)
 
-	if s := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			s, http.StatusOK)
+	// Body equals mocked response
+	if b := rr.Body.String(); b != r.Body {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			b, r.Body)
 	}
 
-	expected := `this is a test`
-	if rr.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			rr.Body.String(), expected)
+	// Status code equals mocked response
+	if s := rr.Code; s != r.StatusCode {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			s, r.StatusCode)
+	}
+
+	// Check CORS header
+	if cors := rr.Header().Get(("Access-Control-Allow-Origin")); cors != "*" {
+		t.Errorf("handler returned unexpected cors header: got %v want *", cors)
+	}
+
+	// Check content-type header
+	if contentType := rr.Header().Get(("Content-Type")); contentType != r.Headers["content-type"] {
+		t.Errorf("handler returned unexpected content-type header: got %v want %v", contentType, r.Headers["content-type"])
+	}
+
+	// No content-length header
+	if l := rr.Header().Get(("content-length")); l != "" {
+		t.Errorf("handler returned unexpected cors header: got %v want ''", l)
+	}
+}
+
+func TestLambdaInvoke(t *testing.T) {
+
+	responses := []restResponse{
+		{
+			Body:       "{\"hasPayload\":true}",
+			Headers:    nil,
+			StatusCode: 200,
+		},
+		{
+			Body:       "{\"hasPayload\":true,\"AnotherProp\":123}",
+			Headers:    map[string]string{"content-type": "application/json"},
+			StatusCode: 200,
+		},
+		{
+			Body:       "{\"error\":true}",
+			Headers:    nil,
+			StatusCode: 500,
+		},
+	}
+
+	for _, response := range responses {
+		runTest(t, response)
 	}
 }
