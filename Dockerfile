@@ -2,7 +2,6 @@ FROM golang:alpine AS build-env
 RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh
 WORKDIR /app 
-RUN go get github.com/aws/aws-sdk-go
 ADD . .
 RUN go build -o main .
 
