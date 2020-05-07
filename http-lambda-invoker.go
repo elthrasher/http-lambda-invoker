@@ -28,7 +28,7 @@ type proxyHeader map[string]string
 // Parts of the request to send to Lambda.
 type makeProxyRequest struct {
 	Body              []byte              `json:"body"`
-	Headers           proxyHeader					`json:"headers"`
+	Headers           proxyHeader         `json:"headers"`
 	HTTPMethod        string              `json:"httpMethod"`
 	Path              string              `json:"path"`
 	QueryStringParams map[string][]string `json:"queryStringParameters"`
