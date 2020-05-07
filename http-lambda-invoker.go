@@ -62,15 +62,14 @@ func getConfig(key string) string {
 	}
 }
 
-func makeProxyHeaders(original_headers map[string][]string) proxyHeader {
-	var new_headers proxyHeader
-	new_headers = make(proxyHeader)
+func makeProxyHeaders(originalHeaders map[string][]string) proxyHeader {
+	var newHeaders = make(proxyHeader)
 
-	for header := range original_headers {
-		new_headers[header] = strings.Join(original_headers[header], "")
+	for header := range originalHeaders {
+		newHeaders[header] = strings.Join(originalHeaders[header], "")
 	}
 
-	return new_headers
+	return newHeaders
 }
 
 func handleError(w http.ResponseWriter, err error) {
