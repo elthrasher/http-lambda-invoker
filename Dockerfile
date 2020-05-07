@@ -1,7 +1,7 @@
 FROM golang:alpine AS build-env
 RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh
-WORKDIR /app 
+WORKDIR /app
 ADD . .
 RUN go build -o main .
 

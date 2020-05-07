@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // LambdaClient enables mocking of the client for test purposes
@@ -22,10 +23,12 @@ type LambdaClient struct {
 	lambdaiface.LambdaAPI
 }
 
+type proxyHeader map[string]string
+
 // Parts of the request to send to Lambda.
 type makeProxyRequest struct {
 	Body              []byte              `json:"body"`
-	Headers           map[string][]string `json:"headers"`
+	Headers           proxyHeader					`json:"headers"`
 	HTTPMethod        string              `json:"httpMethod"`
 	Path              string              `json:"path"`
 	QueryStringParams map[string][]string `json:"queryStringParameters"`
@@ -57,6 +60,16 @@ func getConfig(key string) string {
 	default:
 		return ""
 	}
+}
+
+func makeProxyHeaders(originalHeaders map[string][]string) proxyHeader {
+	var newHeaders = make(proxyHeader)
+
+	for header := range originalHeaders {
+		newHeaders[header] = strings.Join(originalHeaders[header], "")
+	}
+
+	return newHeaders
 }
 
 func handleError(w http.ResponseWriter, err error) {
@@ -91,8 +104,11 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert headers to appropriate ApiGateway format
+	proxyHeaders := makeProxyHeaders(r.Header)
+
 	// Get struct.
-	request := makeProxyRequest{body, r.Header, r.Method, r.URL.Path, r.URL.Query()}
+	request := makeProxyRequest{body, proxyHeaders, r.Method, r.URL.Path, r.URL.Query()}
 
 	// Marshal request.
 	payload, err := json.Marshal(request)
