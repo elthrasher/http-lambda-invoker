@@ -12,6 +12,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
 )
 
+type restRequest struct {
+	Body   string
+	Method string
+	Path   string
+}
+
+type exchange struct {
+	Request  restRequest
+	Response restResponse
+}
+
 type mockLambdaClient struct {
 	lambdaiface.LambdaAPI
 	Resp lambda.InvokeOutput
@@ -21,14 +32,15 @@ func (m mockLambdaClient) Invoke(*lambda.InvokeInput) (*lambda.InvokeOutput, err
 	return &m.Resp, nil
 }
 
-func runTest(t *testing.T, r restResponse) {
-	req, err := http.NewRequest("GET", "/", ioutil.NopCloser(strings.NewReader("")))
+func runTest(t *testing.T, e exchange) {
+	request, response := e.Request, e.Response
+	req, err := http.NewRequest(request.Method, request.Path, ioutil.NopCloser(strings.NewReader(request.Body)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
 
-	payload, err := json.Marshal(r)
+	payload, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,15 +61,15 @@ func runTest(t *testing.T, r restResponse) {
 	l.invokeLambda(rr, req)
 
 	// Body equals mocked response
-	if b := rr.Body.String(); b != r.Body {
+	if b := rr.Body.String(); b != response.Body {
 		t.Errorf("handler returned unexpected body: got %v want %v",
-			b, r.Body)
+			b, response.Body)
 	}
 
 	// Status code equals mocked response
-	if s := rr.Code; s != r.StatusCode {
+	if s := rr.Code; s != response.StatusCode {
 		t.Errorf("handler returned wrong status code: got %v want %v",
-			s, r.StatusCode)
+			s, response.StatusCode)
 	}
 
 	// Check CORS header
@@ -66,8 +78,8 @@ func runTest(t *testing.T, r restResponse) {
 	}
 
 	// Check content-type header
-	if contentType := rr.Header().Get(("Content-Type")); contentType != r.Headers["content-type"] {
-		t.Errorf("handler returned unexpected content-type header: got %v want %v", contentType, r.Headers["content-type"])
+	if contentType := rr.Header().Get(("Content-Type")); contentType != response.Headers["content-type"] {
+		t.Errorf("handler returned unexpected content-type header: got %v want %v", contentType, response.Headers["content-type"])
 	}
 
 	// No content-length header
@@ -78,21 +90,51 @@ func runTest(t *testing.T, r restResponse) {
 
 func TestLambdaInvoke(t *testing.T) {
 
-	responses := []restResponse{
+	responses := []exchange{
 		{
-			Body:       "{\"hasPayload\":true}",
-			Headers:    nil,
-			StatusCode: 200,
+			Request: restRequest{
+				Method: "GET",
+				Path:   "/",
+			},
+			Response: restResponse{
+				Body:       "{\"hasPayload\":true}",
+				Headers:    nil,
+				StatusCode: 200,
+			},
 		},
 		{
-			Body:       "{\"hasPayload\":true,\"AnotherProp\":123}",
-			Headers:    map[string]string{"content-type": "application/json"},
-			StatusCode: 200,
+			Request: restRequest{
+				Method: "GET",
+				Path:   "/props",
+			},
+			Response: restResponse{
+				Body:       "{\"hasPayload\":true,\"AnotherProp\":123}",
+				Headers:    map[string]string{"content-type": "application/json"},
+				StatusCode: 200,
+			},
 		},
 		{
-			Body:       "{\"error\":true}",
-			Headers:    nil,
-			StatusCode: 500,
+			Request: restRequest{
+				Method: "GET",
+				Path:   "/error",
+			},
+			Response: restResponse{
+				Body:       "{\"error\":true}",
+				Headers:    nil,
+				StatusCode: 500,
+			},
+		},
+		{
+			Request: restRequest{
+				Body:   "{\"prop\":\"value\"}",
+				Method: "POST",
+				Path:   "/post",
+			},
+			Response: restResponse{
+				Body:       "",
+				Headers:    nil,
+				StatusCode: 200,
+			},
 		},
 	}
 

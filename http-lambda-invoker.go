@@ -27,7 +27,7 @@ type proxyHeader map[string]string
 
 // Parts of the request to send to Lambda.
 type makeProxyRequest struct {
-	Body              []byte              `json:"body"`
+	Body              string              `json:"body"`
 	Headers           proxyHeader         `json:"headers"`
 	HTTPMethod        string              `json:"httpMethod"`
 	Path              string              `json:"path"`
@@ -108,7 +108,7 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 	proxyHeaders := makeProxyHeaders(r.Header)
 
 	// Get struct.
-	request := makeProxyRequest{body, proxyHeaders, r.Method, r.URL.Path, r.URL.Query()}
+	request := makeProxyRequest{string(body), proxyHeaders, r.Method, r.URL.Path, r.URL.Query()}
 
 	// Marshal request.
 	payload, err := json.Marshal(request)
