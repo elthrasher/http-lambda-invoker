@@ -143,7 +143,7 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	// Write status code and body.
 	w.WriteHeader(response.StatusCode)
-	fmt.Fprintf(w, string(response.Body))
+	fmt.Fprint(w, string(response.Body))
 }
 
 // Start simple web server with configured port, sending all traffic to handler.
