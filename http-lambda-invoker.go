@@ -1,44 +1,25 @@
 package main
 
 import (
-	"io/ioutil"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
-
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"strings"
 )
 
 // LambdaClient enables mocking of the client for test purposes
 type LambdaClient struct {
 	lambdaiface.LambdaAPI
-}
-
-type proxyHeader map[string]string
-
-// Parts of the request to send to Lambda.
-type makeProxyRequest struct {
-	Body              string              `json:"body"`
-	Headers           proxyHeader         `json:"headers"`
-	HTTPMethod        string              `json:"httpMethod"`
-	Path              string              `json:"path"`
-	QueryStringParams map[string][]string `json:"queryStringParameters"`
-}
-
-// Parts of the response to send back to the caller.
-type restResponse struct {
-	Body       string
-	Headers    map[string]string
-	StatusCode int
 }
 
 // Set some defaults for envvars.
@@ -60,16 +41,6 @@ func getConfig(key string) string {
 	default:
 		return ""
 	}
-}
-
-func makeProxyHeaders(originalHeaders map[string][]string) proxyHeader {
-	var newHeaders = make(proxyHeader)
-
-	for header := range originalHeaders {
-		newHeaders[header] = strings.Join(originalHeaders[header], "")
-	}
-
-	return newHeaders
 }
 
 func handleError(w http.ResponseWriter, err error) {
@@ -98,17 +69,20 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 	// Error handling seems really verbose. Is there a better way?
 
 	// Read request body.
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		handleError(w, err)
 		return
 	}
 
-	// Convert headers to appropriate ApiGateway format
-	proxyHeaders := makeProxyHeaders(r.Header)
-
 	// Get struct.
-	request := makeProxyRequest{string(body), proxyHeaders, r.Method, r.URL.Path, r.URL.Query()}
+	request := events.APIGatewayProxyRequest{
+		Body:                            string(body),
+		HTTPMethod:                      r.Method,
+		Path:                            r.URL.Path,
+		MultiValueHeaders:               r.Header,
+		MultiValueQueryStringParameters: r.URL.Query(),
+	}
 
 	// Marshal request.
 	payload, err := json.Marshal(request)
@@ -124,7 +98,7 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var response restResponse
+	var response events.APIGatewayProxyResponse
 
 	// Unmarshal response into `response`.
 	err = json.Unmarshal(result.Payload, &response)

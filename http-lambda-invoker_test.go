@@ -8,19 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
 )
 
-type restRequest struct {
-	Body   string
-	Method string
-	Path   string
-}
-
 type exchange struct {
-	Request  restRequest
-	Response restResponse
+	Request  events.APIGatewayProxyRequest
+	Response events.APIGatewayProxyResponse
 }
 
 type mockLambdaClient struct {
@@ -34,7 +29,7 @@ func (m mockLambdaClient) Invoke(*lambda.InvokeInput) (*lambda.InvokeOutput, err
 
 func runTest(t *testing.T, e exchange) {
 	request, response := e.Request, e.Response
-	req, err := http.NewRequest(request.Method, request.Path, ioutil.NopCloser(strings.NewReader(request.Body)))
+	req, err := http.NewRequest(request.HTTPMethod, request.Path, ioutil.NopCloser(strings.NewReader(request.Body)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,45 +87,45 @@ func TestLambdaInvoke(t *testing.T) {
 
 	responses := []exchange{
 		{
-			Request: restRequest{
-				Method: "GET",
-				Path:   "/",
+			Request: events.APIGatewayProxyRequest{
+				HTTPMethod: "GET",
+				Path:       "/",
 			},
-			Response: restResponse{
-				Body:       "{\"hasPayload\":true}",
+			Response: events.APIGatewayProxyResponse{
+				Body:       `{"hasPayload":true}`,
 				Headers:    nil,
 				StatusCode: 200,
 			},
 		},
 		{
-			Request: restRequest{
-				Method: "GET",
-				Path:   "/props",
+			Request: events.APIGatewayProxyRequest{
+				HTTPMethod: "GET",
+				Path:       "/props",
 			},
-			Response: restResponse{
-				Body:       "{\"hasPayload\":true,\"AnotherProp\":123}",
+			Response: events.APIGatewayProxyResponse{
+				Body:       `{"hasPayload":true, "AnotherProp":123}`,
 				Headers:    map[string]string{"content-type": "application/json"},
 				StatusCode: 200,
 			},
 		},
 		{
-			Request: restRequest{
-				Method: "GET",
-				Path:   "/error",
+			Request: events.APIGatewayProxyRequest{
+				HTTPMethod: "GET",
+				Path:       "/error",
 			},
-			Response: restResponse{
-				Body:       "{\"error\":true}",
+			Response: events.APIGatewayProxyResponse{
+				Body:       `{"error":true}`,
 				Headers:    nil,
 				StatusCode: 500,
 			},
 		},
 		{
-			Request: restRequest{
-				Body:   "{\"prop\":\"value\"}",
-				Method: "POST",
-				Path:   "/post",
+			Request: events.APIGatewayProxyRequest{
+				Body:       `{"prop":"value"}`,
+				HTTPMethod: "POST",
+				Path:       "/post",
 			},
-			Response: restResponse{
+			Response: events.APIGatewayProxyResponse{
 				Body:       "",
 				Headers:    nil,
 				StatusCode: 200,
