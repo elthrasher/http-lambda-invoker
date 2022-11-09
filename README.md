@@ -38,10 +38,11 @@ See also the [example repo](https://github.com/elthrasher/http-lambda-invoker-ex
 * LAMBDA_ENDPOINT - This is the address and port of your [lambci](https://github.com/lambci/docker-lambda) docker container running your lambda function. It should probably reference an address in your docker network. In the provided example, it uses the service name plus default port for lambci. (required)
 * LAMBDA_NAME - The name of the function you want to call. AWS is somewhat forgiving here. If you have only one function, the name doesn't matter, but it's still required. (required)
 * PORT - The port you want to run http-lambda-invoker on. This should match the right-side ports mapping in the compose file if you want to hit it with a browser.
+* ROUTE - The route the lambda has to be called on. This can be used to extract path parameters. Example: `ROUTE=/path/:pathid/subpath/:subpathid`
 
 # http proxy
 
-The path, query params, request body and headers will all be passed to your lambda function and then mapped into the response object.
+The path, path params (if `ROUTE` is configured), query params, request body and headers will all be passed to your lambda function and then mapped into the response object.
 
 # CORS
 

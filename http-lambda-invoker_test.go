@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -135,5 +137,109 @@ func TestLambdaInvoke(t *testing.T) {
 
 	for _, response := range responses {
 		runTest(t, response)
+	}
+}
+
+func Test_pathPatternToPathRegex(t *testing.T) {
+	type args struct {
+		pattern string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			"empty path pattern",
+			args{""},
+			"",
+			false,
+		},
+		{
+			"path without variables",
+			args{"/path/subpath"},
+			"/path/subpath",
+			false,
+		},
+		{
+			"path with a variable",
+			args{"/path/:pathid/subpath"},
+			"/path/(?P<pathid>[^/]+)/subpath",
+			false,
+		},
+		{
+			"path with two variables",
+			args{"/path/:pathid/subpath/:subpathid"},
+			"/path/(?P<pathid>[^/]+)/subpath/(?P<subpathid>[^/]+)",
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pathPatternToPathRegex(tt.args.pattern)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("pathPatternToPathRegex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got.String() != tt.want {
+				t.Errorf("pathPatternToPathRegex() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_extractPathParameters(t *testing.T) {
+	type args struct {
+		path          string
+		rePathPattern *regexp.Regexp
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string]string
+	}{
+		{
+			"path with no variable without regex",
+			args{
+				path:          "/path/subPath",
+				rePathPattern: regexp.MustCompile(``),
+			},
+			map[string]string{},
+		},
+		{
+			"path with no variable",
+			args{
+				path:          "/path/subPath",
+				rePathPattern: regexp.MustCompile(`/path/subPath`),
+			},
+			map[string]string{},
+		},
+		{
+			"path not matching the regexp",
+			args{
+				path:          "/foo",
+				rePathPattern: regexp.MustCompile(`/path/(?P<pathid>[^/]+)`),
+			},
+			map[string]string{},
+		},
+		{
+			"path with 2 variables",
+			args{
+				path:          "/path/12345/subPath/abcde",
+				rePathPattern: regexp.MustCompile(`/path/(?P<pathid>[^/]+)/subPath/(?P<subpathid>[^/]+)`),
+			},
+			map[string]string{
+				"pathid":    "12345",
+				"subpathid": "abcde",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractPathParameters(tt.args.path, tt.args.rePathPattern); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("extractPathParameters() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
