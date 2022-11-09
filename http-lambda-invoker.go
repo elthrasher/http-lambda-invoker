@@ -1,44 +1,26 @@
 package main
 
 import (
-	"io/ioutil"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"regexp"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
-
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"strings"
 )
 
 // LambdaClient enables mocking of the client for test purposes
 type LambdaClient struct {
 	lambdaiface.LambdaAPI
-}
-
-type proxyHeader map[string]string
-
-// Parts of the request to send to Lambda.
-type makeProxyRequest struct {
-	Body              string              `json:"body"`
-	Headers           proxyHeader         `json:"headers"`
-	HTTPMethod        string              `json:"httpMethod"`
-	Path              string              `json:"path"`
-	QueryStringParams map[string][]string `json:"queryStringParameters"`
-}
-
-// Parts of the response to send back to the caller.
-type restResponse struct {
-	Body       string
-	Headers    map[string]string
-	StatusCode int
 }
 
 // Set some defaults for envvars.
@@ -60,16 +42,6 @@ func getConfig(key string) string {
 	default:
 		return ""
 	}
-}
-
-func makeProxyHeaders(originalHeaders map[string][]string) proxyHeader {
-	var newHeaders = make(proxyHeader)
-
-	for header := range originalHeaders {
-		newHeaders[header] = strings.Join(originalHeaders[header], "")
-	}
-
-	return newHeaders
 }
 
 func handleError(w http.ResponseWriter, err error) {
@@ -98,17 +70,31 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 	// Error handling seems really verbose. Is there a better way?
 
 	// Read request body.
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		handleError(w, err)
 		return
 	}
 
-	// Convert headers to appropriate ApiGateway format
-	proxyHeaders := makeProxyHeaders(r.Header)
+	route := getConfig("ROUTE")
+	rePathPattern, err := pathPatternToPathRegex(route)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	pathParameters := extractPathParameters(r.URL.Path, rePathPattern)
 
 	// Get struct.
-	request := makeProxyRequest{string(body), proxyHeaders, r.Method, r.URL.Path, r.URL.Query()}
+	request := events.APIGatewayProxyRequest{
+		Body:                            string(body),
+		HTTPMethod:                      r.Method,
+		Path:                            r.URL.Path,
+		MultiValueHeaders:               r.Header,
+		Headers:                         multiValueMapToSingleValueMap(r.Header),
+		MultiValueQueryStringParameters: r.URL.Query(),
+		QueryStringParameters:           multiValueMapToSingleValueMap(r.URL.Query()),
+		PathParameters:                  pathParameters,
+	}
 
 	// Marshal request.
 	payload, err := json.Marshal(request)
@@ -124,7 +110,7 @@ func (c *LambdaClient) invokeLambda(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var response restResponse
+	var response events.APIGatewayProxyResponse
 
 	// Unmarshal response into `response`.
 	err = json.Unmarshal(result.Payload, &response)
@@ -151,4 +137,51 @@ func main() {
 	var Port = getConfig("PORT")
 	http.HandleFunc("/", handler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", Port), nil))
+}
+
+// Convert a multi value map to a single value map. This is useful to convert multi value headers or query params to their single value counterparts.
+// This function follows AWS rules: "With the default format, the load balancer uses the last value sent by the client"
+// See: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html#multi-value-headers
+func multiValueMapToSingleValueMap(m map[string][]string) map[string]string {
+	ret := make(map[string]string, len(m))
+	for k, v := range m {
+		ret[k] = ""
+		if len(v) > 0 {
+			ret[k] = v[len(v)-1]
+		}
+	}
+	return ret
+}
+
+// Convert a path pattern to a regexp. This is used to extract path parameters
+// Example:
+//
+//	/path/:pathID/subPath/:subPathID
+//
+// is converted to:
+//
+//	/path/(?P<pathID>[^/]+)/subPath/(?P<subPathID>[^/]+)
+func pathPatternToPathRegex(pattern string) (*regexp.Regexp, error) {
+	rePathPatternToPathRegex := regexp.MustCompile(`:([^/]+)`)
+	return regexp.Compile(rePathPatternToPathRegex.ReplaceAllString(pattern, `(?P<$1>[^/]+)`))
+}
+
+// Extract the path parameters from a real path according to a pattern
+// Example:
+//
+// /path/12345/subPath/abcde
+// matched with: /path/(?P<pathid>[^/]+)/subPath/(?P<subpathid>[^/]+)
+// will return: {"pathid": "12345", "subpathid": "abcde"}
+func extractPathParameters(path string, rePathPattern *regexp.Regexp) map[string]string {
+	match := rePathPattern.FindStringSubmatch(path)
+	pathParameters := map[string]string{}
+	for i, name := range rePathPattern.SubexpNames() {
+		if len(match) < i+1 {
+			break
+		}
+		if i != 0 && name != "" {
+			pathParameters[name] = match[i]
+		}
+	}
+	return pathParameters
 }
